@@ -1,0 +1,179 @@
+```{r}
+library(dplyr)
+library(ggsci)
+```
+
+```{r getting data ready, warning = FALSE}
+GPP.BB1 <- read.csv('C:/Users/Marion/Documents/UBC/BB1-2/Data/BB_L3.csv') 
+GPP.BB1 <- GPP.BB1 %>% filter(DATE >= '2020-01-01 00:00'& DATE <= '2021-01-01 00:00') %>% dplyr::select(GPP_f, jday, co2_flux, DATE)
+GPP.BB1$Site <- "CA-DBB"
+GPP.BB1$DATE <- as.POSIXct(GPP.BB1$DATE, format = "%Y-%m-%d %H:%M:%S", tz="UTC")
+
+Parin <- read.csv("C:/Users/Marion/Documents/UBC/BB1-2/Data/met_corrected_gapfilledBB2.csv") %>% filter(DATE >= '2020-01-01 00:00:00' & DATE <'2021-01-01 00:00:00') %>%
+  dplyr::select(DATE, jday, INCOMING_PAR)
+Parin$DATE <- as.POSIXct(Parin$DATE, format = "%Y-%m-%d %H:%M:%S", tz="UTC")
+Parin$TIME <- format(Parin$DATE, format = "%H:%M:%S", tz="UTC")
+Parin$month <- months(Parin$DATE, abbreviate = TRUE)
+ind.GS <- (Parin$jday >= 92 & Parin$jday <= 274)
+ind.NGS <- (Parin$jday < 92 | Parin$jday >=275)
+Parin$Period <- " "
+Parin$Period[ind.GS] <- "GS"
+Parin$Period[ind.NGS] <- "NGS"
+
+GPP.BB1 <- full_join(GPP.BB1, Parin) # join par and co2 data
+
+GPP.BB2 <- read.csv('C:/Users/Marion/Documents/UBC/BB1-2/Data/BB2_L3.csv')%>% filter(DATE >= '2020-01-01 00:00' & DATE <= '2021-01-01 00:00') %>% dplyr::select(GPP_f, jday, co2_flux, DATE)
+GPP.BB2$Site <- "CA-DB2"
+GPP.BB2$DATE <- as.POSIXct(GPP.BB2$DATE, format = "%Y-%m-%d %H:%M:%S", tz="UTC")
+
+GPP.BB2 <- full_join(GPP.BB2, Parin)
+
+GPP <- full_join(GPP.BB1, GPP.BB2) %>% filter(INCOMING_PAR > 0.1 & GPP_f > 0.1 & GPP_f < 15)
+```
+
+```{r LIGHT RESPONSE CURVE GS}
+#BB1 GS
+GPP.BB1.gs <- GPP %>% filter(Site == "CA-DBB" & Period =="GS") 
+#GPP.BB1.gs <- GPP.BB1.gs %>% mutate(NEE.GPP = co2_flux * -1) %>% filter(NEE.GPP > -20 & NEE.GPP < 20)
+
+#model <- nls(NEE.GPP ~ (a*GPP.BB1.gs$INCOMING_PAR)*b/(a*GPP.BB1.gs$INCOMING_PAR+b), start=list(a = 0.1, b = 0.1), data = GPP.BB1.gs)
+
+#coefs.Modelbb1 <- coef(model)
+#coefs.Modelbb1
+#a <- 0.005
+#b <- 4.26
+
+#plot(GPP.BB1.gs$INCOMING_PAR, GPP.BB1.gs$NEE.GPP)
+#lines(GPP.BB1.gs$INCOMING_PAR,predict(model), col = "red")
+
+#nls fit SIMILAR TO NINGYU'S PAPER
+#ggplot(GPP.BB1.gs, aes(INCOMING_PAR, NEE.GPP)) + geom_point() + 
+ # stat_function(fun=function(x) (a*x)*b/(a*x+b), colour = "red") +
+  #theme_bw()
+
+#using GPP - results look better?
+model.GPP <- nls(GPP_f ~ (a*GPP.BB1.gs$INCOMING_PAR)*b/(a*GPP.BB1.gs$INCOMING_PAR+b), start=list(a = 0.01, b = 0.1), data = GPP.BB1.gs)
+
+summary(model.GPP)
+
+coefs.Modelbb1.GPP <- coef(model.GPP)
+coefs.Modelbb1.GPP
+a.GPP <- 0.018
+b.GPP <- 4.81
+
+
+ggplot(GPP.BB1.gs, aes(INCOMING_PAR, GPP_f)) + geom_point() + 
+  stat_function(fun=function(x) (a.GPP*x)*b.GPP/(a.GPP*x+b.GPP), colour = "red") +
+      xlab(bquote('Incoming PAR (umol'  ~m^-2~day^-1*')'))+
+  theme_bw()
+
+#BB2 GS
+GPP.BB2.gs <- GPP %>% filter( Site == "CA-DB2" & Period =="GS") 
+#GPP.BB2.gs <- GPP.BB2.gs %>% mutate(NEE.GPP = co2_flux * -1) %>% filter(NEE.GPP > -20 & NEE.GPP < 20)
+
+#model.2 <- nls(NEE.GPP ~ (a*GPP.BB2.gs$INCOMING_PAR)*b/(a*GPP.BB2.gs$INCOMING_PAR+b), start=list(a = 0.1, b = 0.1), data = GPP.BB2.gs)
+
+#coefs.Modelbb2 <- coef(model.2)
+#coefs.Modelbb2
+#a <- 0.006
+#b <- 4.25
+
+#plot(GPP.BB2.gs$INCOMING_PAR, GPP.BB2.gs$NEE.GPP)
+#lines(GPP.BB2.gs$INCOMING_PAR,predict(model.2), col = "red")
+
+#using GPP - results look better?
+model.GPP.2 <- nls(GPP_f ~ (a*GPP.BB2.gs$INCOMING_PAR)*b/(a*GPP.BB2.gs$INCOMING_PAR+b), start=list(a = 0.001, b = 0.1), data = GPP.BB2.gs)
+
+summary(model.GPP.2)
+
+coefs.Modelbb2.GPP <- coef(model.GPP.2)
+coefs.Modelbb2.GPP
+a.GPP.2 <- 0.025
+b.GPP.2 <- 6.25
+
+ggplot(GPP.BB2.gs, aes(INCOMING_PAR, GPP_f)) + geom_point() + 
+  stat_function(fun=function(x) (a.GPP.2*x)*b.GPP.2/(a.GPP.2*x+b.GPP.2), colour = "red") +
+      xlab(bquote('Incoming PAR (umol'  ~m^-2~day^-1*')'))+
+  theme_bw()
+
+
+#Both sites together (GS):
+(GS.LR <- GPP %>% filter(Period == "GS" & INCOMING_PAR > 10) %>%
+  ggplot(., aes(INCOMING_PAR, GPP_f), group = Site) + geom_point(aes(color = Site))+
+  scale_color_jco()+
+    stat_function(fun=function(x) (a.GPP*x)*b.GPP/(a.GPP*x+b.GPP), colour = "#EFC000FF") +
+  stat_function(fun=function(x) (a.GPP.2*x)*b.GPP.2/(a.GPP.2*x+b.GPP.2), colour = "#0073C2FF") +
+       # xlab(bquote('Incoming PAR ('*mu~'mol'~m^-2~s^-1*')'))+
+          #ylab(bquote('GPP ('*mu~'mol' ~m^-2~s^-1*')'))+
+   ylab(expression(paste("GPP (",mu,"mol"," ", m^-2," ", s^-1, ")")))+
+      xlab(expression(paste("Incoming PAR (",mu,"mol"," ", m^-2," ", s^-1, ")")))+
+   #ylab(expression(paste("Power [",mu, V^2,"]")))
+  ggtitle("a")+
+  theme(axis.text = element_text(size = 14),
+          axis.title.x = element_text(size = 15),
+         axis.title.y = element_text(size = 15))+
+  theme_bw())
+```
+
+```{r LIGHT RESPONSE CURVE NGS}
+#BB1 NGS
+GPP.BB1.ngs <- GPP%>% filter(Site == "CA-DBB" & Period =="NGS") 
+#GPP.BB1.ngs <- GPP.BB1.ngs %>% mutate(NEE.opp = co2_flux * -1) #%>% filter(NEE.GPP > -20 & NEE.GPP < 20)
+
+
+#using GPP - results look better?
+model.GPP.ngs <- nls(GPP_f ~ (a*GPP.BB1.ngs$INCOMING_PAR)*b/(a*GPP.BB1.ngs$INCOMING_PAR+b), start=list(a = 0.01, b = 0.1), data = GPP.BB1.ngs)
+
+summary(model.GPP.ngs)
+
+coefs.Modelbb1.GPP.ngs <- coef(model.GPP.ngs)
+coefs.Modelbb1.GPP.ngs
+a.GPP.ngs <- 0.01
+b.GPP.ngs <- 1.84
+
+ggplot(GPP.BB1.ngs, aes(INCOMING_PAR, GPP_f)) + geom_point() + 
+  stat_function(fun=function(x) (a.GPP.ngs*x)*b.GPP.ngs/(a.GPP.ngs*x+b.GPP.ngs), colour = "red") +
+      xlab(bquote('Incoming PAR (umol'  ~m^-2~day^-1*')'))+
+  scale_y_continuous(limits = c(-10, 10))+
+  theme_bw()
+
+#BB2 NGS
+GPP.BB2.ngs <- GPP %>% filter(Site== "CA-DB2" & Period =="NGS") 
+#GPP.BB2.ngs <- GPP.BB2.ngs %>% mutate(NEE.GPP = co2_flux * -1) %>% filter(NEE.GPP > '-20' & NEE.GPP < '20')
+
+#using GPP - results look better?
+model.GPP.2ngs <- nls(GPP_f ~ (a*GPP.BB2.ngs$INCOMING_PAR)*b/(a*GPP.BB2.ngs$INCOMING_PAR+b), start=list(a = 0.1, b = 0.1), data = GPP.BB2.ngs)
+
+summary(model.GPP.2ngs)
+
+coefs.Modelbb2.GPPngs <- coef(model.GPP.2ngs)
+coefs.Modelbb2.GPPngs
+a.GPP.2ngs <- 0.011
+b.GPP.2ngs <- 2.81
+
+ggplot(GPP.BB2.ngs, aes(INCOMING_PAR, GPP_f)) + geom_point() + 
+  stat_function(fun=function(x) (a.GPP.2ngs*x)*b.GPP.2ngs/(a.GPP.2ngs*x+b.GPP.2ngs), colour = "red") +
+      ylab(bquote('Incoming PAR (umol'  ~m^-2~day^-1*')'))+
+  theme_bw()
+
+#Both sites together (NGS):
+(NGS.lr <- GPP %>% filter(Period == "NGS" & INCOMING_PAR > 10) %>%
+  ggplot(., aes(INCOMING_PAR, GPP_f), group = Site) + geom_point(aes(color = Site))+
+  scale_color_jco()+
+    stat_function(fun=function(x) (a.GPP.ngs*x)*b.GPP.ngs/(a.GPP.ngs*x+b.GPP.ngs), colour = "#EFC000FF") +
+  stat_function(fun=function(x) (a.GPP.2ngs*x)*b.GPP.2ngs/(a.GPP.2ngs*x+b.GPP.2ngs), colour = "#0073C2FF") +
+      #  xlab(bquote('Incoming PAR ('*mu~'mol' ~m^-2~s^-1*')'))+
+       #   ylab(bquote('GPP ('*mu~'mol' ~m^-2~s^-1*')'))+
+     ylab(expression(paste("GPP (",mu,"mol"," ", m^-2," ", s^-1, ")")))+
+      xlab(expression(paste("Incoming PAR (",mu,"mol"," ", m^-2," ", s^-1, ")")))+
+  ggtitle("b") +
+  theme(axis.title.y = element_blank(),
+        axis.text = element_text(size = 14),
+          axis.title.x = element_text(size = 15))+
+         #axis.title.y = element_text(size = 12))+
+  theme_bw())
+```
+
+
+
+
